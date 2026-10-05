@@ -1,0 +1,17 @@
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Build / rendering artifacts
+_site/
+*.pdf.bak
+
+# Internal publishing / review notes - never committed
+PUBLISHING.md
+PRE_V1_TODO.md
+INTERNAL_NOTES.md
+*.review.md
