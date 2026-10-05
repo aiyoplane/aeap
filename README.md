@@ -8,6 +8,22 @@ AEAP is designed for use at any boundary where an autonomous system — a human-
 
 ---
 
+## Where AEAP sits
+
+The industry is converging on the recognition that identity, access control, and runtime policy decisions alone are insufficient to govern consequential actions performed by autonomous systems. AEAP addresses a specific layer of that problem.
+
+**Runtime authorization** — whether an actor may perform a class of action — is well-served by existing identity, delegation, and access-control protocols: OAuth 2.1, OIDC, Okta XAA / ID-JAG, Microsoft Entra, Auth0, the Human Agency Protocol (HAP), Alibaba / Cisco Agent Operation Authorization (AOA), and OpenA2A AAP.
+
+**Execution authorization** — whether a specific consequential action should execute right now, under the Protected Party's current Policy, against the specific Intent crossing the Composition Boundary — is the layer AEAP addresses.
+
+AEAP's architectural primitives — Intent, Policy, Evidence Signals, Verdict, Execution Receipt, Composition Boundary — define a protocol-level vocabulary for making that authorization decision interoperable and the resulting authorization artifact independently verifiable. The protocol composes with identity, delegation, and runtime-policy systems; it does not replace them.
+
+Independently proposed architectures in the same problem space — including A2SPA (Agent-to-Secure Payload Authorization), the IETF Adaptive Authorization draft's Execution Handle and Finality Sink primitives, SCITT Pre-Execution Permit, DRP, and EMILIA — are evidence that the category is becoming real enough that multiple architects are converging on the same missing layer. AEAP's contribution is a protocol specification whose semantics are intended to be interoperable across such implementations rather than a competing single-vendor mechanism. An AEAP-conformant implementation can consume authorization artifacts from these adjacent efforts as Evidence Signals, and an AEAP Execution Receipt can be consumed as evidence by them.
+
+See §1 (framing and authorship-vs-authority), §2 (five invariants), §9 (Composition Boundary), §10 (deployment-model neutrality), and §11-§13 (HAP, Okta XAA / ID-JAG, and Alibaba / Cisco AOA Interop Profiles) in the specification for the normative treatment.
+
+---
+
 ## Current status
 
 **AEAP v0.9.1-DRAFT** — initial public draft, published for review and comment ahead of v1.0.
