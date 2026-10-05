@@ -27,7 +27,7 @@ v1.0 is gated on the Appendix A conformance test vector artifact being authored 
 Two independent reference implementations of the RDP composition pattern demonstrate Core conformance. The two share no vendored code — they are maintained as separate codebases precisely so that passing the same test vectors from both demonstrates AEAP's interoperable implementability.
 
 **Node:**
-- [`@aiyoplane/mcp-authz`](https://www.npmjs.com/package/@aiyoplane/mcp-authz) — Runtime Decision Point composition at an MCP server
+- [`@aiyoplane/mcp-authz`](https://github.com/aiyoplane/mcp-authz) — Runtime Decision Point composition at an MCP server
 - [`@aiyoplane/verify`](https://www.npmjs.com/package/@aiyoplane/verify) — Offline Ed25519 verifier for AEAP execution receipts
 
 **Python:**
