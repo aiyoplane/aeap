@@ -1,6 +1,6 @@
 # Aiyo Execution Authorization Protocol (AEAP)
 
-**Version:** 0.9.1-DRAFT
+**Version:** 0.9.2-DRAFT
 **Status:** Public Draft — Request for Comment
 **Published:** [DRAFT — publish date pending]
 **Author:** Aiyoplane, Inc. — https://aiyoplane.com
@@ -85,6 +85,12 @@ Reference implementations of AEAP are published under Apache 2.0 across two inde
     - 14.1 [Specification versioning](#141-specification-versioning)
     - 14.2 [Receipt Signature Profile versioning](#142-receipt-signature-profile-versioning)
     - 14.3 [Policy versioning in cross-RDP contexts](#143-policy-versioning-in-cross-rdp-contexts)
+15. [Security Model and Responsibility Boundaries](#15-security-model-and-responsibility-boundaries)
+    - 15.1 [Responsibility boundaries](#151-responsibility-boundaries)
+    - 15.2 [Properties AEAP Core guarantees](#152-properties-aeap-core-guarantees)
+    - 15.3 [Properties AEAP Core explicitly does not guarantee](#153-properties-aeap-core-explicitly-does-not-guarantee)
+    - 15.4 [Receipt validity over time](#154-receipt-validity-over-time)
+    - 15.5 [Signature verification versus trust](#155-signature-verification-versus-trust)
 
 Appendix A: [Conformance Test Vectors](#appendix-a-conformance-test-vectors)
 Appendix B: [Change Log](#appendix-b-change-log)
@@ -1431,6 +1437,124 @@ Where multiple Protected Parties exist in a system and each operates their own R
 
 ---
 
+## 15. Security Model and Responsibility Boundaries
+
+This section defines the security properties AEAP Core guarantees, the properties it explicitly does NOT guarantee, and the responsibility boundaries between the three parties that must cooperate for an AEAP-authorized action to produce the intended security outcome. The section is informative in its framing and normative where explicit MUST / MUST NOT language appears.
+
+Any security claim about an authorization system decomposes into four distinct questions:
+
+1. **Receipt authenticity.** Did a legitimate RDP issue this receipt?
+2. **Decision integrity.** Was the authorization decision sound given the Policy and Evidence?
+3. **Enforcement integrity.** Did the Composition Boundary actually enforce the Verdict?
+4. **Operational accountability.** Can an operator later reconstruct what was authorized, under what Policy, with what Evidence, and whether the action was executed?
+
+These are different questions requiring different controls. AEAP Core addresses some directly, informs others, and leaves still others to the implementation and the Executor. This section codifies which is which.
+
+### 15.1 Responsibility boundaries
+
+AEAP's security properties depend on correct behavior at three distinct responsibility layers:
+
+**AEAP Core (this specification).** Defines invariants, verdict semantics, cryptographic contracts, canonicalization rules, replay-window requirements, verifier result codes, and the Composition Boundary primitive. The specification is the normative description of what MUST be true for conformant implementations. The authority of a claim at this layer is established by Appendix A conformance.
+
+**RDP Implementation (the operator of a Runtime Decision Point).** Operates signing keys per §8; publishes the JWKS; signs receipts; maintains the replay-prevention store for `intent_id` uniqueness per §3.5; maintains audit records; performs key rotation and compromise handling per §8.4. For the Aiyoplane-operated hosted RDP, the operator is Aiyoplane, Inc.; for a self-operated RDP, the operator is the Protected Party or an agent acting on its behalf.
+
+**Protected Party and Executor.** The Protected Party authors the Policy and selects the Evidence Signals and their trust declarations. The Executor is the party or system that performs the Consequential Action downstream of an ALLOW Verdict; the Executor is responsible for enforcing the Composition Boundary (§9) in its deployment, maintaining downstream idempotency (§15.3.1), and — where applicable — reporting observed execution outcomes to close the receipt lineage (§7.5).
+
+A security property that holds at the Core layer does not automatically hold at the Implementation layer, and a property that holds at the Implementation layer does not automatically hold at the Executor layer. Each layer must be reasoned about separately.
+
+### 15.2 Properties AEAP Core guarantees
+
+For a conformant AEAP implementation at Core Conformance Level or above (§1.4), the following properties are guaranteed by the specification:
+
+- **Receipt authenticity.** An Execution Receipt that successfully verifies against the Issuer's published JWKS using the Receipt Signature Profile declared in the receipt was produced by a party in possession of the corresponding signing key material at the moment the receipt was signed (§7, §8).
+- **Receipt integrity.** The claims within a verified receipt have not been modified since signing. RFC 8785 JCS canonicalization combined with Ed25519 signatures over the canonical bytes make substitution of any claim detectable (§7.4).
+- **Verifier result-code precision.** A conformant verifier MUST distinguish, at minimum, the result codes defined in §8.4: `VERIFIED`, `VERIFIED_EXPIRED`, `COMPROMISED_KEY`, `UNVERIFIABLE`, `INVALID`, and `INTENT_MISMATCH`. A verifier that collapses "the signature mathematically verifies" and "the signing key is still trustworthy for reliance" into a single boolean is non-conformant.
+- **Policy evaluation determinism.** The same Policy, evaluated against the same canonical Intent and the same canonical Evidence Signals, MUST produce the same Verdict (§4.3).
+- **Fail-closed defaults.** In any ambiguous, indeterminate, or erroneous condition — Policy silent on the Intent class, Policy evaluator unable to reach a conclusion, required Evidence Signal missing or expired, Policy store unreachable — the RDP MUST produce BLOCK, not ALLOW (§2.2 invariant 5).
+- **Intent uniqueness and replay resistance.** A given `intent_id` MUST NOT be re-evaluated within the replay window defined by §3.5. Attempts to replay a previously-evaluated Intent within the window MUST produce BLOCK with the appropriate reason code.
+- **Ternary verdict semantics.** The Verdict output of an evaluation is one of ALLOW, ESCALATE, or BLOCK (§6). BLOCK MUST NOT execute; unresolved ESCALATE MUST hold the action pending resolution; ALLOW MAY permit, subject to the Composition Boundary and §15.2 enforcement conditions.
+- **Composition Boundary primitive.** AEAP Core defines the Composition Boundary (§9) and specifies its invariants. A conformant Composition Boundary MUST enforce the Verdict semantics above and MUST NOT silently convert an unresolved ESCALATE or a BLOCK into execution.
+
+### 15.3 Properties AEAP Core explicitly does not guarantee
+
+The following properties are intentionally outside AEAP Core's guarantees. Each is a legitimate security concern; naming the boundary explicitly is the mechanism by which the responsibility for each is correctly attributed.
+
+#### 15.3.1 Exactly-once execution
+
+AEAP Core prevents the same Intent from being re-evaluated within the replay window (§3.5). It does NOT prevent the authorized action from being executed more than once.
+
+A conforming example of the gap: an Executor receives ALLOW, successfully performs the action, crashes before recording completion, and retries. The receipt still verifies — it is the same valid receipt — and the action can duplicate.
+
+Downstream idempotency is the Executor's responsibility. Common patterns include idempotency keys tied to the receipt's `intent_id`, atomic state transitions keyed on `intent_id`, and payment-rail-level or database-level deduplication keyed on `intent_id`.
+
+AEAP Core deliberately does not expand into an exactly-once execution protocol. Execution semantics are the concern of the systems that perform the execution; AEAP's concern is the authorization decision that gates them.
+
+#### 15.3.2 Pre-expiration revocation of individual receipts
+
+AEAP Core does NOT provide a mechanism for revoking an individual receipt before its `exp`. Portable offline verification against the published JWKS is a deliberate design property; introducing a mandatory online status check at verification time would reverse that property for every Executor.
+
+Protected Parties requiring earlier withdrawal of a specific receipt MUST use an implementation-specific control. Two patterns are recognized by this specification:
+
+**Short-lived receipts with re-evaluation.** The Protected Party configures the Policy to issue short `exp` (typically seconds to minutes). The Executor is required to re-submit the Intent for a fresh RDP evaluation per sensitive action. This pattern requires no protocol change; it is a Policy configuration choice using AEAP Core as specified.
+
+**Implementation-specific online status mechanism.** An Issuer MAY expose an online status endpoint that an Executor opts into for specific high-value actions. The Executor explicitly accepts the availability dependency where the use case justifies it, rather than every Executor inheriting the dependency.
+
+A future standardized AEAP profile MAY formalize the second pattern. Such a profile is NOT part of this specification and does NOT change any requirement in AEAP Core.
+
+#### 15.3.3 Policy correctness
+
+AEAP Core evaluates whatever Policy is authored and declared by the Protected Party. The specification guarantees that evaluation is deterministic and that the Verdict and reason code accurately reflect the result of that evaluation; it does NOT guarantee that the Policy itself expresses the rules the Policy author intended.
+
+A conforming example of the gap: a Policy with a decimal-placement error in an amount threshold produces a deterministic ALLOW on a payment two orders of magnitude larger than the Protected Party intended. The receipt faithfully attests to the evaluation. The authorship error is a Protected Party responsibility.
+
+Policy correctness is a Protected Party operational concern. Tooling that supports Policy authoring, review, simulation against historical Intents, versioning, and rollback is implementation infrastructure around the protocol. It is not a protocol guarantee.
+
+#### 15.3.4 Evidence Signal truthfulness
+
+The three-component Evidence envelope (§5.1) — Value / Provenance / Attestation — requires every Evidence Signal evaluated by the Policy to carry its own trust chain. A conformant AEAP implementation MUST evaluate the Attestations the Policy declares against the Policy's declared trust requirements.
+
+AEAP Core does NOT guarantee:
+
+- That the Attestation issuer is honest.
+- That the Attestation reflects the current real-world state of the external system it describes.
+- That the Attestation issuer's own key infrastructure is sound.
+
+Selecting which Evidence Signal sources to trust and which Attestations to require is a Protected Party design decision made in the Policy.
+
+#### 15.3.5 Enforcement at the Composition Boundary in a specific deployment
+
+AEAP Core defines the Composition Boundary primitive (§9) and specifies the invariants it MUST satisfy. A reference Composition Boundary implementation that correctly implements the pattern is a correct implementation of the specification.
+
+AEAP Core does NOT guarantee that the Composition Boundary in a given deployment is the only path to the gated Consequential Action. If a Protected Party gates a payment through an AEAP-attached Composition Boundary but leaves an unauthenticated administrative endpoint, a sibling API, or a direct database write that reaches the same consequence, the boundary has been bypassed structurally.
+
+Verifying that enforcement is exhaustive — that the gated action is reachable only through the Composition Boundary — is the Executor's responsibility.
+
+#### 15.3.6 Complete execution lineage
+
+AEAP Core defines the Receipt (§7) and the OPTIONAL `execution-result` lineage-closure callback (§7.5). The intent-to-receipt portion is a protocol guarantee: for every authorization decision the RDP makes, a complete, signed, verifiable record exists.
+
+AEAP Core does NOT guarantee that the observed outcome of the authorized action is reported back. The callback shape is defined; cooperative Executor participation is required to close the trail. An Executor that performs the action without reporting the outcome does not produce a non-conformant receipt, but the Protected Party's execution lineage is incomplete.
+
+### 15.4 Receipt validity over time
+
+The semantic question of what a receipt means over time is addressed as follows:
+
+An AEAP ALLOW receipt attests that at the moment of RDP evaluation, the specific Intent satisfied the specific Policy against the specific Evidence Signals available at that moment, and the authorization is valid for the duration specified by `exp`.
+
+A Policy change that occurs after an ALLOW does NOT retroactively invalidate previously issued receipts unless the Protected Party's Policy explicitly scopes authorization validity to fresher Evidence than the receipt's `exp` interval permits. Protected Parties requiring the latter MUST use the short-lived receipt pattern described in §15.3.2.
+
+A receipt whose `exp` has passed MUST NOT be used to initiate a new Consequential Action (§8.3). A verifier that encounters a receipt past its `exp` MUST return `VERIFIED_EXPIRED` rather than `VERIFIED` (§8.4).
+
+### 15.5 Signature verification versus trust
+
+A successful signature verification establishes that the receipt was signed by a party in possession of the corresponding key material at the moment of signing. It does NOT, by itself, establish that the key is currently trustworthy for reliance.
+
+A verifier MUST consult the Issuer's published JWKS for current key status (§8.4) and MUST return `COMPROMISED_KEY` rather than `VERIFIED` for receipts signed by a key whose current JWKS entry carries a compromised status, regardless of whether the signature mathematically verifies.
+
+Relying parties MUST treat signature verification as a necessary but not sufficient condition for reliance. The full chain — signature verification, key-status consultation, `exp` check, and `intent_id` binding to the proposed action — is the complete reliance check.
+
+---
+
 ## Appendix A: Conformance Test Vectors
 
 This Appendix defines the normative conformance test vectors against which candidate AEAP implementations are validated. An implementation is AEAP-conformant at a declared Conformance Level and declared set of Profiles when it passes all test vectors applicable to that Level and those Profiles.
@@ -1473,6 +1597,10 @@ Signatures themselves may differ (different keys produce different signatures ov
 ---
 
 ## Appendix B: Change Log
+
+### 0.9.2-DRAFT (October 2026)
+
+Additive: adds §15 Security Model and Responsibility Boundaries. §15 codifies the responsibility boundary between AEAP Core, the RDP Implementation, and the Protected Party / Executor; names the security properties AEAP Core guarantees; explicitly names the properties AEAP Core does NOT guarantee (exactly-once execution, pre-expiration revocation of individual receipts, policy correctness, Evidence Signal truthfulness, enforcement exhaustiveness at the Composition Boundary in a given deployment, complete execution lineage without cooperative Executor participation); clarifies receipt validity over time; and clarifies signature verification versus trust. No change to any previously-defined element of AEAP Core; no change to receipt format, signing, verification, or canonicalization rules; conformant 0.9.1-DRAFT implementations remain conformant to 0.9.2-DRAFT.
 
 ### 0.9.1-DRAFT (October 2026)
 
@@ -1533,4 +1661,4 @@ The specification maintainer commits to responding to substantive change proposa
 
 ---
 
-*End of AEAP v0.9.1-DRAFT. The specification is complete through §14 and Appendices A-D. Conformance test vectors are maintained as a companion artifact (Appendix D).*
+*End of AEAP v0.9.2-DRAFT. The specification is complete through §15 and Appendices A-D. Conformance test vectors are maintained as a companion artifact (Appendix D).*

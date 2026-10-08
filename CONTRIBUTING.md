@@ -4,7 +4,7 @@ AEAP is published as an open specification for review, comment, and third-party 
 
 ## Current cycle
 
-AEAP is at **v0.9.1-DRAFT** — a public Request-for-Comment draft. The next milestone is v1.0, which is gated on the Appendix A conformance test vector artifact being authored and passed identically by at least two independent reference implementations. We welcome:
+AEAP is at **v0.9.2-DRAFT** — a public Request-for-Comment draft. The next milestone is v1.0, which is gated on the Appendix A conformance test vector artifact being authored and passed identically by at least two independent reference implementations. We welcome:
 
 - **Review and comment** on the specification prose
 - **Independent implementations** of AEAP in any language or runtime

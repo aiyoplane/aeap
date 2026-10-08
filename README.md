@@ -26,7 +26,7 @@ See §1 (framing and authorship-vs-authority), §2 (five invariants), §9 (Compo
 
 ## Current status
 
-**AEAP v0.9.1-DRAFT** — initial public draft, published for review and comment ahead of v1.0.
+**AEAP v0.9.2-DRAFT** — public draft, published for review and comment ahead of v1.0. The v0.9.2 update is additive: it adds §15 Security Model and Responsibility Boundaries without changing any previously-defined element.
 
 - 📄 **Specification:** [`AEAP.md`](./AEAP.md)
 - 🧪 **Conformance test vectors:** [`test-vectors/`](./test-vectors/) — pending v1.0; see directory README for status
